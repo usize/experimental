@@ -89,6 +89,20 @@ cluster and credentials.
 Verified by killing the primary mid-run: requests continued to be served from
 the secondary with no client-visible error.
 
+### Guardrails (Lakera Guard)
+
+Uncomment the `safety-check` chain, then add it to the listener ahead of
+`main`: `filter_chains: [safety-check, main]`. Set `LAKERA_API_KEY` in the
+environment. Request bodies are screened before they reach the provider;
+flagged requests get a 403 and never touch the upstream.
+
+This one runs as its own chain rather than an inline filter, so it can
+terminate a request early.
+
+Verified against a local stub standing in for the Lakera API: a `flagged`
+verdict returned 403 with the backend untouched, and a clean verdict passed
+through to the backend.
+
 ### Guardrails (NeMo)
 
 Uncomment the `ai_guardrails` block and point it at a reachable NeMo endpoint.
