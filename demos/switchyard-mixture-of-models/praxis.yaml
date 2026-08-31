@@ -1,0 +1,72 @@
+# switchyard_route mixture-of-models demo — REAL models, real routing.
+#
+#   browser (web/) → gateway :18080 → switchyard_route → weak: Ollama :11434 (llama3.2:3b)
+#                                                       → strong: openrouter-shim :18097 → OpenRouter (anthropic/claude-sonnet-4.5)
+#                                    judge → OpenRouter (deepseek/deepseek-chat)
+#
+# The judge is a direct HTTPS sub-request callout (handled inside the filter,
+# see docs/switchyard-route.md), so it talks to OpenRouter's real path
+# directly. The weak/strong *answer* traffic goes through Praxis's
+# load_balancer, whose cluster endpoints are host:port only (no scheme, no
+# path rewrite) — so the strong leg goes through openrouter-shim.py, a tiny
+# local process that adds the Bearer token and rewrites the path onto
+# OpenRouter's real /api/v1/chat/completions. Ollama already serves
+# /v1/chat/completions natively, so the weak leg needs no shim.
+#
+# Model names here MUST match WEAK_MODEL / STRONG_MODEL / JUDGE_MODEL at the
+# top of web/server.py (used there only to label the UI, not to drive
+# routing).
+
+admin:
+  address: "127.0.0.1:19901"
+
+listeners:
+  - name: switchyard-gateway
+    address: "127.0.0.1:18080"
+    filter_chains:
+      - routing
+
+filter_chains:
+  - name: routing
+    filters:
+      - filter: switchyard_route
+        judge:
+          endpoint: "https://openrouter.ai/api/v1/chat/completions"
+          # deepseek-v4-flash is a reasoning model — it burns ~5k reasoning
+          # tokens (40s+) even on a short classification prompt, which the
+          # switchyard_route judge callout has no way to suppress. Use the
+          # non-reasoning chat model instead; the judge only needs a short
+          # structured verdict, not a solved answer.
+          model: "deepseek/deepseek-chat"
+          auth:
+            value_env: OPENROUTER_API_KEY
+          timeout_ms: 20000
+        threshold: 0.5
+        targets:
+          weak:
+            cluster: weak-cluster
+            model: "llama3.2:3b"
+          strong:
+            cluster: strong-cluster
+            model: "anthropic/claude-sonnet-4.5"
+        session_floor:
+          enabled: true
+          ttl_secs: 3600
+          exclude_below: true
+          # Once a session is floored strong it can only stay strong, so
+          # re-judging it would just re-derive a foregone answer. This is the
+          # visible "peg to strong" behavior the demo is about.
+          escalation_ratchet: true
+        on_failure: open
+      - filter: load_balancer
+        clusters:
+          - name: weak-cluster
+            endpoints:
+              - "127.0.0.1:11434"
+          - name: strong-cluster
+            endpoints:
+              - "127.0.0.1:18097"
+
+# Loopback-only demo; allow_root for UID 0 CI/container shells.
+insecure_options:
+  allow_root: true

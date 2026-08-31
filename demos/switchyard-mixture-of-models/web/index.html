@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>switchyard_route — mixture of models</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <header class="topbar">
+      <div class="title">
+        <h1>switchyard_route</h1>
+        <p>Capability-mode mixture-of-models routing, live</p>
+      </div>
+      <button id="new-session" class="btn secondary">New session</button>
+    </header>
+
+    <main class="content">
+      <section class="chat-pane">
+        <div id="transcript" class="transcript"></div>
+        <form id="composer" class="composer">
+          <input id="message" type="text" placeholder="Ask something easy, then something hard…" autocomplete="off" />
+          <button type="submit" class="btn primary">Send</button>
+        </form>
+        <div class="presets">
+          <button type="button" class="chip" data-prompt="What is 2 + 2?">easy: 2+2</button>
+          <button type="button" class="chip" data-prompt="Prove that every finitely generated group acting freely on a tree is free, and generalize to graphs of groups.">hard: free groups proof</button>
+          <button type="button" class="chip" data-prompt="What's the capital of France?">easy: capital</button>
+        </div>
+      </section>
+
+      <aside class="status-pane">
+        <div class="tier-card" id="tier-card" data-tier="idle">
+          <div class="tier-label">current model</div>
+          <div class="tier-badge" id="tier-badge">—</div>
+          <div class="tier-model" id="tier-model">waiting for first turn</div>
+        </div>
+
+        <div class="counter-card">
+          <div class="counter-value" id="weak-counter">0</div>
+          <div class="counter-label" id="weak-counter-label">turns answered by the small model</div>
+        </div>
+
+        <div id="peg-banner" class="peg-banner hidden">
+          🔒 Pegged to <strong>strong</strong> — this session will never drop back to the small model.
+        </div>
+
+        <div class="log-card">
+          <div class="log-title">routing log <span id="session-tag"></span></div>
+          <ol id="route-log" class="route-log"></ol>
+        </div>
+
+        <div class="legend">
+          <div><span class="dot weak"></span> weak — Ollama <code id="legend-weak">llama3.2:3b</code></div>
+          <div><span class="dot strong"></span> strong — OpenRouter <code id="legend-strong">anthropic/claude-sonnet-4.5</code></div>
+          <div><span class="dot judge"></span> judge — OpenRouter <code id="legend-judge">deepseek/deepseek-chat</code></div>
+        </div>
+      </aside>
+    </main>
+
+    <section class="log-pane">
+      <div class="log-pane-header">
+        <span>Praxis gateway log — live (<code>server.log</code>, judge + routing at debug, everything else at info)</span>
+        <label class="follow-toggle"><input type="checkbox" id="log-follow" checked /> follow</label>
+      </div>
+      <div id="log-lines" class="log-lines"></div>
+    </section>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
