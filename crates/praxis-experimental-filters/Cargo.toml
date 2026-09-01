@@ -19,7 +19,11 @@ workspace = true
 
 [dependencies]
 async-trait = "0.1.89"
+bytes = { workspace = true }
+http = { workspace = true }
+serde = { workspace = true }
 serde_yaml = { package = "yaml_serde", version = "0.10.4" }
+tracing = { workspace = true }
 
 # Praxis core (crates.io). Keep in lockstep with praxis-proxy/ai's pins so the
 # `FilterRegistry` type unifies to a single version across this workspace and the

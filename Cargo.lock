@@ -2169,7 +2169,11 @@ name = "praxis-experimental-filters"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bytes",
+ "http",
  "praxis-proxy-filter",
+ "serde",
+ "tracing",
  "yaml_serde",
 ]
 
