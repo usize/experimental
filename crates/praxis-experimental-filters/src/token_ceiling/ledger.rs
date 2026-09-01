@@ -312,4 +312,89 @@ mod tests {
             Admission::Deny { retry_after_ms: 1 }
         );
     }
+
+    // -----------------------------------------------------------------------
+    // Property tests
+    // -----------------------------------------------------------------------
+
+    proptest::proptest! {
+        /// The core admission property: with every charge landing in one
+        /// window, a key is denied exactly when its charges reached the
+        /// ceiling, regardless of the amounts or their order.
+        #[test]
+        fn admission_matches_summed_charges_within_one_window(
+            charges in proptest::collection::vec(0_u64..1_000, 0..8),
+            ceiling in 1_u64..2_000,
+        ) {
+            let ledger = CeilingLedger::new(60_000, 16);
+            let mut total: u64 = 0;
+            for (index, tokens) in charges.iter().enumerate() {
+                ledger.charge("alice", *tokens, u64::try_from(index).unwrap());
+                total = total.saturating_add(*tokens);
+            }
+            let decision = ledger.admit("alice", ceiling, u64::try_from(charges.len()).unwrap());
+            if total >= ceiling {
+                proptest::prop_assert!(matches!(decision, Admission::Deny { .. }), "used {} >= ceiling {}", total, ceiling);
+            } else {
+                proptest::prop_assert_eq!(decision, Admission::Admit, "used {} < ceiling {}", total, ceiling);
+            }
+        }
+
+        /// A denied key is always admitted again once the advised wait has
+        /// elapsed, and the advised wait never exceeds the window itself.
+        #[test]
+        fn denied_keys_recover_after_the_advised_wait(
+            window_ms in 1_u64..100_000,
+            charge_at in 0_u64..100_000,
+            probe_delta in 0_u64..100_000,
+            tokens in 1_u64..1_000,
+        ) {
+            let ledger = CeilingLedger::new(window_ms, 16);
+            ledger.charge("alice", tokens, charge_at);
+            let probe_at = charge_at.saturating_add(probe_delta.min(window_ms.saturating_sub(1)));
+            if let Admission::Deny { retry_after_ms } = ledger.admit("alice", tokens, probe_at) {
+                proptest::prop_assert!(retry_after_ms >= 1, "deny inside the window advises a positive wait");
+                proptest::prop_assert!(retry_after_ms <= window_ms, "the wait never exceeds one window");
+                let recovered = ledger.admit("alice", tokens, probe_at.saturating_add(retry_after_ms));
+                proptest::prop_assert_eq!(recovered, Admission::Admit, "the advised wait must suffice");
+            }
+        }
+
+        /// Extreme values never panic, wrap, or underflow anywhere in the
+        /// admit/charge cycle (all arithmetic is saturating).
+        #[test]
+        fn extreme_values_never_panic(
+            window_ms: u64,
+            tokens: u64,
+            ceiling in 1_u64..,
+            first in proptest::prelude::any::<u64>(),
+            second in proptest::prelude::any::<u64>(),
+        ) {
+            let ledger = CeilingLedger::new(window_ms, 4);
+            ledger.charge("alice", tokens, first);
+            ledger.charge("alice", tokens, second);
+            let _ = ledger.admit("alice", ceiling, first);
+            let _ = ledger.admit("alice", ceiling, second);
+            let _ = ledger.admit("alice", ceiling, u64::MAX);
+        }
+
+        /// The ledger never tracks more than `max_keys` keys, whatever key
+        /// mix arrives, and full-ledger charges for new keys are dropped
+        /// rather than evicting live budgets.
+        #[test]
+        fn tracked_keys_never_exceed_the_bound(
+            key_indexes in proptest::collection::vec(0_u8..8, 1..32),
+            max_keys in 1_usize..4,
+        ) {
+            let ledger = CeilingLedger::new(60_000, max_keys);
+            let mut recorded: std::collections::BTreeSet<u8> = std::collections::BTreeSet::new();
+            for (tick, key_index) in key_indexes.iter().enumerate() {
+                let key = format!("key-{key_index}");
+                if ledger.charge(&key, 1, u64::try_from(tick).unwrap()) == Charge::Recorded {
+                    recorded.insert(*key_index);
+                }
+            }
+            proptest::prop_assert!(recorded.len() <= max_keys, "recorded {} keys, bound {}", recorded.len(), max_keys);
+        }
+    }
 }

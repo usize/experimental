@@ -29,3 +29,6 @@ tracing = { workspace = true }
 # `FilterRegistry` type unifies to a single version across this workspace and the
 # git-pinned praxis-ai-proxy server crate.
 praxis-filter = { version = "0.5.3", package = "praxis-proxy-filter" }
+
+[dev-dependencies]
+proptest = { workspace = true }

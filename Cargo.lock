@@ -2172,6 +2172,7 @@ dependencies = [
  "bytes",
  "http",
  "praxis-proxy-filter",
+ "proptest",
  "serde",
  "tracing",
  "yaml_serde",
