@@ -81,6 +81,24 @@ docker run --rm -p 8080:8080 \
 Each commented block in the sample config has been verified to load in this
 image. Uncomment, supply what it needs, restart.
 
+### Token spend ceilings
+
+Uncomment the `token_ceiling` block to cap how many tokens each named key
+may consume per window. Keep it declared before `token_count` — it
+charges the `token.total` that `token_count` reports, and response hooks
+run in reverse declared order. A key that spends its budget receives 429
+with `Retry-After` and `X-RateLimit-*-Tokens` headers until the window
+resets; other keys keep working. `examples/configs/token-ceiling.yaml` is
+a ready-to-run standalone config, and `docs/token-ceiling.md` covers
+semantics, trust caveats, and limitations.
+
+Verified against a local stub provider: spending a key's budget flipped
+that key to 429 with the correct `Retry-After`, a second key was admitted
+independently while the first was exhausted, and the exhausted key was
+admitted again after its window reset. (Charging is post-hoc, so the
+final admitted request can carry a key past its ceiling — see the
+limitations in `docs/token-ceiling.md`.)
+
 ### Provider fallback
 
 Uncomment the `failover` chain, then point the listener at it by changing

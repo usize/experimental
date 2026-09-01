@@ -36,6 +36,26 @@ filter_chains:
   - name: main
     filters:
       # -----------------------------------------------------------------
+      # Token spend ceilings  (uncomment to enable)
+      # -----------------------------------------------------------------
+      # Caps how many tokens each named key may consume per window; an
+      # exhausted key gets 429 + Retry-After until its window resets.
+      # Charges the token.total that token_count reports, so it must stay
+      # declared BEFORE token_count (response hooks run in reverse).
+      #
+      # x-app-id is client-controlled — fine for a single-user gateway,
+      # not an enforcement boundary. See docs/token-ceiling.md.
+      #
+      # - filter: token_ceiling
+      #   window: 1h
+      #   key:
+      #     header: x-app-id
+      #   ceilings:
+      #     alpha: 200000
+      #     beta: 50000
+      #   default_ceiling: 10000
+
+      # -----------------------------------------------------------------
       # Token accounting  (on by default)
       # -----------------------------------------------------------------
       # token_count parses usage out of the provider's response body and

@@ -1,0 +1,74 @@
+# token_ceiling — per-key token spend caps in five minutes
+#
+# Two named keys with their own budgets, everything else capped by a
+# default. The budget key comes from the x-app-id request header, which is
+# CLIENT-CONTROLLED: callers pick their own budget by picking their own
+# header value. That is fine for the single-user image this filter ships
+# in; it is not an enforcement boundary against untrusted callers. When a
+# local key-auth filter lands, switch `key.header` to `key.metadata` and
+# let authenticated identity drive the budget instead.
+#
+#   docker run --rm -p 8080:8080 \
+#     -v "$PWD/token-ceiling.yaml:/etc/praxis/praxis.yaml:ro" \
+#     ghcr.io/praxis-proxy/experimental:latest
+#
+# Exercise it (with a provider or stub on 127.0.0.1:3000):
+#
+#   curl -s -X POST http://localhost:8080/v1/chat/completions \
+#     -H 'content-type: application/json' -H 'x-app-id: alpha' \
+#     -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'
+#
+# Repeat until alpha's 200-token window budget is spent: the next request
+# returns 429 with Retry-After and X-RateLimit-*-Tokens headers, while
+# `x-app-id: beta` keeps working. After the window resets, alpha is
+# admitted again.
+#
+# See docs/token-ceiling.md for semantics and limitations.
+
+admin:
+  address: "127.0.0.1:9901"
+
+listeners:
+  - name: gateway
+    address: "0.0.0.0:8080"
+    filter_chains:
+      - main
+
+filter_chains:
+  - name: main
+    filters:
+      # Declared BEFORE token_count: response hooks run in reverse declared
+      # order, so token_count parses the provider's usage (writing
+      # token.total) before token_ceiling's end-of-stream hook charges it.
+      - filter: token_ceiling
+        window: 1m
+        key:
+          header: x-app-id
+        ceilings:
+          alpha: 200
+          beta: 1000
+        default_ceiling: 100
+
+      - filter: token_count
+        provider: openai # openai | anthropic | google | bedrock | azure
+
+      - filter: access_log
+
+      - filter: router
+        routes:
+          - path_prefix: "/"
+            cluster: provider
+
+      - filter: load_balancer
+        clusters:
+          - name: provider
+            endpoints:
+              - "127.0.0.1:3000"
+            # For a real HTTPS provider, replace the endpoint above and add:
+            #   tls:
+            #     sni: api.openai.com
+
+# Required only because the endpoint above is a private address. Remove
+# this when pointing at a real provider hostname over TLS.
+insecure_options:
+  allow_private_endpoints: true
